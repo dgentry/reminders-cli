@@ -1,10 +1,11 @@
 import EventKit
 
-private let Store = EKEventStore()
+private let store = EKEventStore()
+private let df = DateFormatter()
 
 final class Reminders {
     func requestAccess(completion: @escaping (_ granted: Bool) -> Void) {
-        Store.requestAccess(to: .reminder) { granted, _ in
+        store.requestAccess(to: .reminder) { granted, _ in
             DispatchQueue.main.async {
                 completion(granted)
             }
@@ -18,13 +19,14 @@ final class Reminders {
         }
     }
 
-    func showListItems(withName name: String) {
+    func showListItems(withName name: String, isComplete: Bool) {
         let calendar = self.calendar(withName: name)
         let semaphore = DispatchSemaphore(value: 0)
+        df.dateStyle = .short
 
-        self.reminders(onCalendar: calendar) { reminders in
-            for (i, reminder) in reminders.enumerated() {
-                print(i, String(reminder.title))
+        self.reminders(onCalendar: calendar, itemComplete:isComplete) { reminders in
+            for (i, r) in reminders.enumerated() {
+                print(isComplete ? df.string(from: r.completionDate!) : "", i, String(r.title))
             }
 
             semaphore.signal()
@@ -37,7 +39,7 @@ final class Reminders {
         let calendar = self.calendar(withName: name)
         let semaphore = DispatchSemaphore(value: 0)
 
-        self.reminders(onCalendar: calendar) { reminders in
+        self.reminders(onCalendar: calendar, itemComplete:false) { reminders in
             guard let reminder = reminders[safe: index] else {
                 print("No reminder at index \(index) on \(name)")
                 exit(1)
@@ -45,7 +47,7 @@ final class Reminders {
 
             do {
                 reminder.isCompleted = true
-                try Store.save(reminder, commit: true)
+                try store.save(reminder, commit: true)
                 print("Completed '\(reminder.title!)'")
             } catch let error {
                 print("Failed to save reminder with error: \(error)")
@@ -60,12 +62,12 @@ final class Reminders {
 
     func addReminder(string: String, toListNamed name: String) {
         let calendar = self.calendar(withName: name)
-        let reminder = EKReminder(eventStore: Store)
+        let reminder = EKReminder(eventStore: store)
         reminder.calendar = calendar
         reminder.title = string
 
         do {
-            try Store.save(reminder, commit: true)
+            try store.save(reminder, commit: true)
             print("Added '\(reminder.title!)' to '\(calendar.title)'")
         } catch let error {
             print("Failed to save reminder with error: \(error)")
@@ -76,13 +78,13 @@ final class Reminders {
     // MARK: - Private functions
 
     private func reminders(onCalendar calendar: EKCalendar,
+                                      itemComplete: Bool,
                                       completion: @escaping (_ reminders: [EKReminder]) -> Void)
     {
-        let predicate = Store.predicateForReminders(in: [calendar])
-        Store.fetchReminders(matching: predicate) { reminders in
-            let reminders = reminders?
-                .filter { !$0.isCompleted }
-            completion(reminders ?? [])
+        let myPredicate = store.predicateForReminders(in: [calendar])
+        store.fetchReminders(matching: myPredicate) { reminders in
+            let r = reminders? .filter { $0.isCompleted == itemComplete }
+            completion(r ?? [])
         }
     }
 
@@ -96,7 +98,7 @@ final class Reminders {
     }
 
     private func getCalendars() -> [EKCalendar] {
-        return Store.calendars(for: .reminder)
+        return store.calendars(for: .reminder)
                     .filter { $0.allowsContentModifications }
     }
 }

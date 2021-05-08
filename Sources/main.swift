@@ -8,7 +8,10 @@ private func createCLI() -> Group {
             reminders.showLists()
         }
         $0.command("show") { (listName: String) in
-            reminders.showListItems(withName: listName)
+            reminders.showListItems(withName: listName, isComplete:false)
+        }
+        $0.command("show-complete") { (listName: String) in
+            reminders.showListItems(withName: listName, isComplete:true)
         }
         $0.command("complete") { (listName: String, index: Int) in
             reminders.complete(itemAtIndex: index, onListNamed: listName)
